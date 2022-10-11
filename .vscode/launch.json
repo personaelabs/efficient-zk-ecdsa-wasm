@@ -1,0 +1,45 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'rust-elliptic-curve'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=rust-elliptic-curve",
+                    "--package=rust-elliptic-curve"
+                ],
+                "filter": {
+                    "name": "rust-elliptic-curve",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'rust-elliptic-curve'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=rust-elliptic-curve",
+                    "--package=rust-elliptic-curve"
+                ],
+                "filter": {
+                    "name": "rust-elliptic-curve",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
