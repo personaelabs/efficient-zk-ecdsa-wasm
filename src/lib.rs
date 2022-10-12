@@ -1,5 +1,3 @@
-#![feature(slice_flatten)]
-
 use console_error_panic_hook;
 use hex::FromHex;
 use libsecp256k1::{PublicKey, SecretKey};
@@ -7,10 +5,10 @@ use num_bigint::BigUint;
 use serde;
 use serde::{Deserialize, Serialize};
 use std::ops::Mul;
+use std::str::FromStr;
 use wasm_bindgen::prelude::*;
 
-const STRIDE: u32 = 8;
-const NUM_STRIDES: u32 = 256 / STRIDE;
+mod constants;
 
 #[derive(Serialize, Deserialize)]
 struct Powers {
@@ -36,12 +34,12 @@ pub fn compute_powers(point_row: String) -> String {
     let mut powers: Vec<Vec<Vec<Vec<String>>>> =
         vec![vec![vec![vec!["0".to_string(); 4]; 2]; 256]; 32];
 
-    for i in 0..NUM_STRIDES {
-        let exponent = BigUint::from(i * STRIDE);
+    for i in 0..constants::NUM_STRIDES {
+        let exponent = BigUint::from(i * constants::STRIDE);
         // power = 2^(i * STRIDE) mod curve_n
         let power = BigUint::from(2 as u32).modpow(&exponent, &curve_n);
 
-        for j in 0..((2 as u32).pow(STRIDE)) {
+        for j in 0..((2 as u32).pow(constants::STRIDE)) {
             // l = 2^(i * STRIDE) * j mod curve_n
             let l = power.clone().mul(BigUint::from(j));
 
@@ -85,10 +83,10 @@ pub fn compute_powers(point_row: String) -> String {
     serde_json::to_string(&(Powers { powers })).unwrap()
 }
 
-// Not complete yet
-pub fn sum_powers(powers: &Vec<Vec<Vec<u64>>>) -> PublicKey {
+fn sum_powers(powers: &Vec<Vec<Vec<u64>>>) -> PublicKey {
     let mut pub_keys: Vec<PublicKey> = Vec::new();
 
+    // Turn byte representation of the points to PublicKey
     for power in powers.iter() {
         // Big endian representation of the x and y coordinates
         let mut bytes: [u8; 65] = [0; 65];
@@ -127,11 +125,57 @@ pub fn sum_powers(powers: &Vec<Vec<Vec<u64>>>) -> PublicKey {
 }
 
 #[wasm_bindgen]
-pub fn hello_wasm(msg: &str) -> String {
-    #[cfg(feature = "console_error_panic_hook")]
-    console_error_panic_hook::set_once();
+// For each of the 32 strides
+// 1. sum the points and multiply by a certain value
+// 2. multiply the sum by a certain value
+// 3. check that the multiplied result equals to the original point
+// Better to check the points are in the correct order as well?
+// For example
+// - The first "row" of the powers: P0_i = 2^0 * i * P  \in i=0..255
+// - sum(P0_i) = (2^0 * 0 * P) + (2^0 * 1 * P) + ... + (2^0 * 255 * P)
+// - P = (2^0 * 0 + ... + 2^0 * 255)^-1 * sum(P0_i)
+pub fn verify_powers(point: String, powers: String) -> bool {
+    // Transform powers in string JSON representation into a 4D vector of u64
+    let powers_as_u64s: Powers = serde_json::from_str(&powers).unwrap();
+    let point_as_bytes = <[u8; 65]>::from_hex(point).unwrap();
 
-    format!("Hello, {}!", msg)
+    let point_as_public_key = PublicKey::parse(&point_as_bytes).unwrap();
+
+    for (i, row) in powers_as_u64s.powers.iter().enumerate() {
+        let powers_as_u64s = row
+            .iter()
+            .map(|coordinates| {
+                coordinates
+                    .iter()
+                    .map(|registers| {
+                        registers
+                            .iter()
+                            .map(|register| u64::from_str_radix(register, 10).unwrap())
+                            .collect::<Vec<u64>>()
+                    })
+                    .collect::<Vec<Vec<u64>>>()
+            })
+            .collect::<Vec<Vec<Vec<u64>>>>();
+
+        let mut sum = sum_powers(&powers_as_u64s);
+
+        // Could hard code the byte representation
+        let mut mul_by = BigUint::from_str(&constants::mults[i])
+            .unwrap()
+            .to_bytes_le();
+        mul_by.resize(32, 0);
+        mul_by.reverse();
+
+        sum.tweak_mul_assign(&SecretKey::parse_slice(&mul_by).unwrap())
+            .unwrap();
+
+        // Check if the summed points equal to the original point
+        if sum.ne(&point_as_public_key) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 #[cfg(test)]
@@ -139,27 +183,18 @@ mod tests {
     use super::*;
     #[test]
     fn test_compute_powers() {
-        // secp256k1 generator point in hex
-        let g_point = "0479be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8";
-        let result = compute_powers(g_point.to_string());
-        // TODO: Check if the results equals G or not
+        // Test using the generator point of secp256k1 for convenience in debugging
+        let point = constants::SECP256K1_G;
+        // For now, just check if this runs without panicking
+        compute_powers(point.to_string());
     }
 
     #[test]
-    // TBD
     fn test_verify_powers() {
-        /*
-        let point_row = "0479be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8";
-        let result = compute_powers(point_row.to_string());
+        let point = constants::SECP256K1_G;
+        let powers = compute_powers(point.to_string());
 
-        let powers: Powers = serde_json::from_str(&result).unwrap();
-        let mut derived_pub_key = sum_powers(&powers.powers[0]);
-
-        let mul_by = biguint_to_bytes(&BigUint::from(65280u64));
-
-        derived_pub_key.tweak_mul_assign(&SecretKey::parse_slice(&mul_by).unwrap()).unwrap();
-
-        println!("derived_pub_key: {:?}", derived_pub_key.serialize().encode_hex::<String>());
-         */
+        let result = verify_powers(point.to_string(), powers);
+        assert_eq!(result, true);
     }
 }
