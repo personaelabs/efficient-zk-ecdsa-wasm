@@ -21,6 +21,7 @@ serde_json = {version = "1.0.86", default-features = false, features = ["alloc"]
 web-sys = "0.3.60"
 serde_bytes = "0.11.7"
 rand = "0.8.5"
+getrandom = { version = "0.2", features = ["js"] }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.13"
