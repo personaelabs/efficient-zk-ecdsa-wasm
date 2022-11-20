@@ -1,0 +1,12 @@
+{
+  "name": "rust-elliptic-curve",
+  "version": "0.1.0",
+  "files": [
+    "rust_elliptic_curve_bg.wasm",
+    "rust_elliptic_curve.js",
+    "rust_elliptic_curve.d.ts"
+  ],
+  "module": "rust_elliptic_curve.js",
+  "types": "rust_elliptic_curve.d.ts",
+  "sideEffects": false
+}
