@@ -124,60 +124,6 @@ fn sum_powers(powers: &Vec<Vec<Vec<u64>>>) -> PublicKey {
     PublicKey::combine(&pub_keys).unwrap()
 }
 
-#[wasm_bindgen]
-// For each of the 32 strides
-// 1. sum the points and multiply by a certain value
-// 2. multiply the sum by a certain value
-// 3. check that the multiplied result equals to the original point
-// Better to check the points are in the correct order as well?
-// For example
-// - The first "row" of the powers: P0_i = 2^0 * i * P  \in i=0..255
-// - sum(P0_i) = (2^0 * 0 * P) + (2^0 * 1 * P) + ... + (2^0 * 255 * P)
-// - P = (2^0 * 0 + ... + 2^0 * 255)^-1 * sum(P0_i)
-pub fn verify_powers(point: String, powers: String) -> bool {
-    // Transform powers in string JSON representation into a 4D vector of u64
-    let powers_as_u64s: Powers = serde_json::from_str(&powers).unwrap();
-    let point_as_bytes = <[u8; 65]>::from_hex(point).unwrap();
-
-    let point_as_public_key = PublicKey::parse(&point_as_bytes).unwrap();
-
-    for (i, row) in powers_as_u64s.powers.iter().enumerate() {
-        let powers_as_u64s = row
-            .iter()
-            .map(|coordinates| {
-                coordinates
-                    .iter()
-                    .map(|registers| {
-                        registers
-                            .iter()
-                            .map(|register| u64::from_str_radix(register, 10).unwrap())
-                            .collect::<Vec<u64>>()
-                    })
-                    .collect::<Vec<Vec<u64>>>()
-            })
-            .collect::<Vec<Vec<Vec<u64>>>>();
-
-        let mut sum = sum_powers(&powers_as_u64s);
-
-        // Could hard code the byte representation
-        let mut mul_by = BigUint::from_str(&constants::mults[i])
-            .unwrap()
-            .to_bytes_le();
-        mul_by.resize(32, 0);
-        mul_by.reverse();
-
-        sum.tweak_mul_assign(&SecretKey::parse_slice(&mul_by).unwrap())
-            .unwrap();
-
-        // Check if the summed points equal to the original point
-        if sum.ne(&point_as_public_key) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -187,14 +133,5 @@ mod tests {
         let point = constants::SECP256K1_G;
         // For now, just check if this runs without panicking
         compute_powers(point.to_string());
-    }
-
-    #[test]
-    fn test_verify_powers() {
-        let point = constants::SECP256K1_G;
-        let powers = compute_powers(point.to_string());
-
-        let result = verify_powers(point.to_string(), powers);
-        assert_eq!(result, true);
     }
 }
